@@ -1,0 +1,379 @@
+// Copyright (c) FIRST and other WPILib contributors.
+// Open Source Software; you can modify and/or share it under the terms of
+// the WPILib BSD license file in the root directory of this project.
+
+package frc.robot;
+
+import edu.wpi.first.wpilibj.Joystick;
+import edu.wpi.first.wpilibj.TimedRobot;
+
+import com.ctre.phoenix.motorcontrol.ControlMode;
+//import com.ctre.phoenix.motorcontrol.NeutralMode;
+import com.ctre.phoenix.motorcontrol.can.VictorSPX;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
+
+public class Robot extends TimedRobot {
+  public Robot(){
+    super(0.05);
+  }
+
+  private double mag, mag2;
+  private double seno, seno2;
+  private int pov, pov2;    
+  private double spd = 1;
+  private double mL = 0,mR = 0;
+  private double mE = 0, mA = 0;
+  private double x1,y1,x2,y2;
+  private boolean analogic1, analogic2;
+  private double rt, lt, rt2, lt2;
+  private boolean a,b,x;
+  private boolean a2,b2,buttonX2;
+  private boolean buttonY2, l = false;
+  private boolean ltB,rtB;
+
+  private double i = 0, j = 0;
+
+  VictorSPX m_direita1 = new VictorSPX(1);
+  VictorSPX m_direita2 = new VictorSPX(2);
+  VictorSPX m_esquerda1 = new VictorSPX(3);
+  VictorSPX m_esquerda2 = new VictorSPX(4);
+
+  VictorSPX m_escalada = new VictorSPX(5);
+  VictorSPX m_angulo = new VictorSPX(6);
+  
+  Joystick joystick1 = new Joystick(0);
+  Joystick joystick2 = new Joystick(1);
+
+  
+
+  @Override
+  public void robotInit() {
+    // We need to invert one side of the drivetrain so that positive voltages
+    // result in both sides moving forward. Depending on how your robot's
+    // gearbox is constructed, you might have to invert the left side instead.
+    m_esquerda2.follow(m_esquerda1);
+    m_direita2.follow(m_direita2);
+    m_esquerda1.configNeutralDeadband(0.04);
+    m_direita1.configNeutralDeadband(0.04);
+  }
+
+  @Override
+  public void teleopPeriodic() {
+    // Atribuição de valores as variaveis
+    x1 = joystick1.getRawAxis(0);
+    y1 = - joystick1.getRawAxis(1);
+    x2 = joystick1.getRawAxis(4);
+    y2 = - joystick1.getRawAxis(5);
+    pov = joystick1.getPOV();
+    rt = joystick1.getRawAxis(3);
+    lt = - joystick1.getRawAxis(2);
+    a = joystick1.getRawButton(1);
+    b = joystick1.getRawButton(2); 
+    x = joystick1.getRawButton(2);
+    a2 = joystick2.getRawButton(1);
+    b2 = joystick2.getRawButton(2); 
+    buttonX2 = joystick2.getRawButton(2);
+    buttonY2 = joystick2.getRawButton(4);
+    
+    if(buttonY2) l = !l;
+
+    rt2 = joystick2.getRawAxis(3);
+    lt2 = joystick2.getRawAxis(2);
+    pov2 = joystick2.getPOV();
+
+    // Calculo das magnitudes
+    mag = Math.hypot(x1, y1);
+    mag2 = Math.hypot(x2, y2);
+
+    // Verificação do uso de botões
+    buttonSe(x,a,b);
+    // Verificação dos analogicos
+    movementCalc();
+    // Calculo dos triggers
+    triggerCalc(rt,lt,x1);
+    // Reiniciação dos valores insignificantes
+    resetAxis();
+    // Calculo do POV
+    povCalc(pov); 
+    // Inicialização da escalada
+    escalada(rt2,lt2);
+    angulo(pov2);
+    
+    lockMotors(l);
+      m_escalada.set(ControlMode.PercentOutput, mE);
+      m_angulo.set(ControlMode.PercentOutput, mA);
+      m_esquerda1.set(ControlMode.PercentOutput, mL);
+      m_direita1.set(ControlMode.PercentOutput, - mR);
+      
+      // Exibição dos valores na simulação
+      SmartDashboardF();
+
+  }
+
+  private void SmartDashboardF() {
+
+      //Movimentação
+      SmartDashboard.putNumber("ForcaMotor Esquerdo", mL);
+      SmartDashboard.putNumber("ForçaMotor Direito", mR);
+      SmartDashboard.putNumber("Magnitude Esquerda", mag);
+      SmartDashboard.putNumber("Magnitude Direita", mag2);
+      SmartDashboard.putNumber("Trigger Esquerdo", -lt);
+      SmartDashboard.putNumber("Trigger Direito", rt);
+      SmartDashboard.putString("Analogico ativo",analogicGate(analogic1,analogic2));
+      SmartDashboard.putString("Trigger ativo", analogicGate(ltB,rtB));
+
+      //Escalada
+      SmartDashboard.putNumber("Trigger Direito 2", rt2);
+      SmartDashboard.putNumber("Trigger Esquerdo 2", lt2);
+      SmartDashboard.putNumber("Valor de I", i);
+      SmartDashboard.putNumber("Valor de J", j);
+      SmartDashboard.putNumber("Motor Escalada", mE);
+      SmartDashboard.putNumber("Motor Angulacao", mA);
+  }
+
+  private String analogicGate(boolean a, boolean b) {
+    
+    if(a) return "Esquerdo"; // Verificação do uso do componente esquerdo
+
+    else if(b) return "Direito"; // Verificação do uso do componente direito
+
+    else return "Nenhum"; // Verificação da inutilização dos dois componentes
+
+  }
+
+  private void resetAxis() {
+
+    // Verificação de inatividade dos analogicos
+    if(mag < 0.1){
+      x1 = 0;
+      y1 = 0;
+      mag = 0;
+    }
+    if(mag2 < 0.1){
+      x2 = 0;
+      y2 = 0;
+      mag2 = 0;
+    }
+    // Verificação da inatividade de ambos analogicos
+    if(mag < 0.1 && mag2 < 0.1 && rt==0 && lt == 0){
+      mL = 0;
+      mR = 0;
+    }
+
+  }
+
+  public void triggerCalc(double rt,double lt,double x){
+    if(Math.abs(x) < 0.04) x = 0;
+
+    if(rt != 0){
+        rtB = true;
+        ltB = false;
+      if(x >= 0){
+        mL = rt * spd;
+        mR = rt * (1 - x) * spd;
+      }else if(x < 0){
+        mL = rt * (1 + x) * spd;
+        mR = rt *spd;
+      }
+    }else if(lt != 0){
+      ltB = true;
+      rtB = false;
+      if(x >= 0){
+        mL = lt * (1 - x) * spd;
+        mR = lt * spd;
+      }else if(x < 0){
+        mL = lt * spd;
+        mR = lt * (1 + x) * spd;
+      }
+
+    }
+  }
+
+  public void quadCalc(double y, double x) {
+      seno = y / mag;
+      // Quadrante 1  
+    if(y >= 0 && x >= 0){
+      mR = (2 * seno - 1) * mag * spd; // Varia
+      mL = mag * spd; // Constante
+      // Quadrante 2
+    }else if(y >= 0 && x <= 0){
+      mR = mag * spd; // Constante
+      mL = (2 * seno - 1) * mag * spd; // Varia
+      // Quadrante 3
+    }else if(y < 0 && x < 0){
+      mR = -mag * spd; // Constante
+      mL = (2 * seno + 1) * mag * spd; // Varia
+      // Quadrante 4
+    }else if(y < 0 && x >= 0){
+      mR = (2 * seno + 1) * mag * spd; // Varia
+      mL = -mag * spd; // Constante
+  }
+}
+
+  public void povCalc(int pov){
+    // Calculo do POV
+    switch(pov){
+
+      case 0:
+      mR = 0.25;
+      mL = 0.25;
+      break;
+
+      case 45:
+      mR = 0;
+      mL = 0.25;
+      break;
+
+      case 90:
+      mR = -0.25;
+      mL = 0.25;
+      break;
+
+      case 135:
+      mR = -0.25;
+      mL = 0;
+      break;
+
+      case 180:
+      mR = -0.25;
+      mL = -0.25;
+      break;
+
+      case 225:
+      mR = 0;
+      mL = -0.25;
+      break;
+
+      case 270:
+      mR = 0.25;
+      mL = -0.25;
+      break;
+
+      case 315:
+      mR = 0.25;
+      mL = 0; 
+      break;
+      
+    }
+      
+      
+  }
+
+  private void movementCalc(){
+
+    //Verificação do analogico esquerdo
+    if(minMethod(mag) != 0){
+      analogic1 = true;
+      analogic2 = false;
+      // Calculo dos quadrantes
+      quadCalc(y1, x1);
+    } 
+
+    else if(minMethod(mag2)!=0){
+      // Calculo dos quadrantes
+      reverseQuadCalc(); 
+      analogic1 = false;
+      analogic2 = true;
+    }
+
+    else{
+      analogic1 = false;
+      analogic2 = false;
+    }
+}
+
+  private void reverseQuadCalc() {
+      seno2 = y2 / mag2;
+        // Quadrante 1  
+      if(y2 >= 0 && x2 >= 0){
+        mR = - mag2 * spd;
+        mL = - (2 * seno2 + 1) * mag2 * spd;
+        // Quadrante 2
+      }else if(y2 >= 0 && x2 < 0){
+        mR = - (2 * seno + 1) * mag2 * spd;
+        mL = - mag2 * spd;
+        // Quadrante 3
+      }else if(y2 < 0 && x2 < 0){
+        mR = mag2 * spd;
+        mL = - (2 * seno - 1) * mag2 * spd;
+        // Quadrante 4
+      }else if(y2 < 0 && x2 >= 0){
+        mR = - (2 * seno + 1) * mag2 * spd;
+        mL = mag2 * spd;
+      }
+  }
+
+  private double buttonSe(boolean x,boolean a, boolean b){
+    
+    if (x)
+      spd = 1;
+      
+    else if(a)
+      spd = 0.5;
+
+    else if(b)
+      spd = 0.25;
+
+      SmartDashboard.putNumber("Velocidade", spd);
+
+      return spd;
+  }
+
+  private double minMethod(double a){
+
+    if(Math.abs(a) < 0.04) return 0;
+
+    else return a;
+    
+    }
+
+  private void lockMotors(boolean y){
+    if(y){
+      mR = 0;
+      mL = 0;
+    }
+  }
+
+  private double escalada(double rt, double lt){
+
+    spd = buttonSe(buttonX2,a2,b2);
+
+    if(rt > 0){
+      mE = 1;
+      i = i + spd;
+      if(i >= 60){
+        i = 60;
+        mE = 0;
+      }
+    }else if(lt > 0 && i > 0){
+      mE = -1;
+      i = i - spd;
+    }else if(i < 0){
+      i = 0;
+    }else{
+      mE =0;
+    }
+    
+    return mE * spd;
+  }
+
+  private double angulo(int pov){
+
+    if(pov == 0){
+      mA = 1;
+      j++;
+      if(j >= 60){
+        j = 60;
+        mA = 0;
+      }
+    }else if(pov == 180 && j > 0){
+      mA = -1;
+      j--;
+    }else if(j < 0){
+      j = 0;
+    }else{
+      mA = 0;
+    }
+      return mA;
+    }
+}
