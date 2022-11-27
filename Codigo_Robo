@@ -30,7 +30,6 @@ public class Robot extends TimedRobot {
   private boolean a2,b2,buttonX2;
   private boolean buttonY2, l = false;
   private boolean ltB,rtB;
-
   private double i = 0, j = 0;
 
   VictorSPX m_direita1 = new VictorSPX(1);
